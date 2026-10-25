@@ -1,0 +1,15 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+export_presets.cfg
+
+# C# / Visual Studio / JetBrains Rider
+.vs/
+.vscode/
+bin/
+obj/
+*.csproj.user
+
+# Betriebssysteme
+.DS_Store
+Thumbs.db
