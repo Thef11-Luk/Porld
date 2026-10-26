@@ -21,8 +21,8 @@ public class Chunk
     public byte[] Pixels;
 	public bool IsDirty = true;
 
-	private int _inactiveTicks = 0;
-	private const int SleepThreshold = 1;
+	public int InactiveTicks = 0;
+	private const int SleepThreshold = 10;
 	private bool _isEvenTick = true;
 
 
@@ -60,7 +60,7 @@ public class Chunk
 
 	public void SetPixel(int x, int y, Pixel pixel)
     {
-		_inactiveTicks = 0;
+		InactiveTicks = 0;
 		IsDirty = true;
         Pixels[GetIndex(x, y)] = (byte)pixel;
     } 
@@ -86,12 +86,12 @@ public class Chunk
 
     public void Simulate()
     {
-		if (_inactiveTicks >= SleepThreshold)
+		if (InactiveTicks >= SleepThreshold)
 		{
 			return;
 		}
 
-		_inactiveTicks++;
+		InactiveTicks++;
         for(int y = Height - 1; y >= 0; y--)
         {
             for (int x = 0; x < Width; x++)
@@ -172,6 +172,11 @@ public class Chunk
 	public byte[] GetRawBytes()
 	{
 		return Pixels;
+	}
+
+	public bool IsActive()
+	{
+		return InactiveTicks < SleepThreshold;
 	}
 
     public override string ToString()

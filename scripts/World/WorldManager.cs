@@ -16,7 +16,9 @@ public partial class WorldManager : Node
     private TerrainGenerator _terrainGenerator;
 
     private Vector2I _lastPlayerChunkCoord = new Vector2I(int.MaxValue, int.MaxValue);
-    private int _renderDistance = 5;
+    private int _renderDistance = 3;
+
+    private int _chunkToSetActive = 0;
 
     public event Action<Chunk> ChunkLoaded;
     public event Action<Chunk> ChunkUnloaded;
@@ -31,11 +33,19 @@ public partial class WorldManager : Node
         }
         Instance = this;
 
-        _terrainGenerator = new TerrainGenerator();
+        _terrainGenerator = new TerrainGenerator(412234);
     }
 
     public override void _Process(double delta)
     {
+        if (Chunks.Count > 0)
+        {
+            int indexToSetActive = _chunkToSetActive % Chunks.Keys.Count;
+            Vector2I vectorToSetActive = Chunks.Keys.ToList()[indexToSetActive];
+            Chunks[vectorToSetActive].InactiveTicks = 0;
+            _chunkToSetActive++;
+        }
+
         Stopwatch sp = new Stopwatch();
         sp.Start();
         var orderedChunks = Chunks.Values.OrderByDescending(c => c.ChunkCoords.Y);
