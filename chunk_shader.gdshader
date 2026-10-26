@@ -27,6 +27,10 @@ void fragment() {
 	else if (material == 4) {
 		COLOR = vec4(0.5, 0.25, 0.0, 1.0);
 	}
+	// water
+	else if (material == 5) {
+		COLOR = vec4(0.0, 0.1, 1.0, 0.6);
+	}
 	else {
 		COLOR = vec4(0.0, 0.0, 0.0, 0.0);
 	}

@@ -26,8 +26,21 @@ public partial class Main : Node2D
 		if(Input.IsMouseButtonPressed(MouseButton.Right))
 		{
 			Vector2I mousePos = (Vector2I)GetLocalMousePosition();
-			WorldManager.Instance.SetPixelGlobal(mousePos.X, mousePos.Y, Pixel.Stone);
+			WorldManager.Instance.SetPixelGlobal(mousePos.X, mousePos.Y, Pixel.Water);
 		}
+		if(Input.IsMouseButtonPressed(MouseButton.Middle))
+		{
+			Vector2I mousePos = (Vector2I)GetLocalMousePosition();
+			int radius = 5;
+			for (int x = -radius; x <= radius; x++)
+			{
+				for (int y = -radius; y <= radius; y++)
+				{
+					WorldManager.Instance.SetPixelGlobal(mousePos.X + x, mousePos.Y + y, Pixel.Empty);
+				}
+			}
+		}
+		
 		if (Input.IsKeyPressed(Key.Up))
 		{
 			cam.Position -= new Vector2(0, 4);

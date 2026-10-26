@@ -1,4 +1,6 @@
 ﻿using Godot;
+using System;
+using System.Linq;
 using System.Text;
 
 namespace Porld;
@@ -9,7 +11,8 @@ public enum Pixel : byte
     Sand,
 	Stone,
 	Grass,
-	Dirt
+	Dirt,
+	Water
 }
 public class Chunk
 {
@@ -19,7 +22,8 @@ public class Chunk
 	public bool IsDirty = true;
 
 	private int _inactiveTicks = 0;
-	private const int SleepThreshold = 30;
+	private const int SleepThreshold = 1;
+	private bool _isEvenTick = true;
 
 
 
@@ -73,6 +77,13 @@ public class Chunk
 		WorldManager.Instance.SetPixelGlobal(globalX, globalY, pixel);
 	}
 
+	private void SwapPixels(int x1, int y1, int x2, int y2)
+	{
+		Pixel temp = GetPixelGlobal(x1, y1);
+		SetPixelGlobal(x1, y1, GetPixelGlobal(x2, y2));
+		SetPixelGlobal(x2, y2, temp);
+	}
+
     public void Simulate()
     {
 		if (_inactiveTicks >= SleepThreshold)
@@ -88,39 +99,80 @@ public class Chunk
                 SimulatePixel(y, x);
             }
         }
+		_isEvenTick = !_isEvenTick;
     }
+
+
+
+    private void SimulatePixel(int y, int x)
+    {
+		bool chess = (y + x) % 2 == 0;
+        switch (GetPixel(x, y))
+        {
+            case Pixel.Sand:
+                {
+					if(new Pixel[]{Pixel.Empty, Pixel.Water}.Contains(GetPixelGlobal(x, y + 1)))
+					{
+						SwapPixels(x, y, x, y + 1);
+					}
+					else if (new Pixel[]{Pixel.Empty, Pixel.Water}.Contains(GetPixelGlobal(x - 1, y + 1)))
+					{
+						SwapPixels(x, y, x - 1, y + 1);
+					}
+					else if (new Pixel[]{Pixel.Empty, Pixel.Water}.Contains(GetPixelGlobal(x + 1, y + 1)))
+					{
+						SwapPixels(x, y, x + 1, y + 1);
+					}
+
+                    break;
+				}
+			case Pixel.Water:
+				{
+					int[] order;
+					if (_isEvenTick)
+					{
+						order = [-1, 1];
+					} else
+					{
+						order = [1, -1];
+					}
+
+					if (GetPixelGlobal(x, y + 2) == Pixel.Empty)
+					{
+						SetPixelGlobal(x, y + 1, Pixel.Water);
+						SetPixel(x, y, Pixel.Empty);
+					}
+					else
+					{
+						foreach (int offset in order)
+						{
+							if (GetPixelGlobal(x + offset, y + 1) == Pixel.Empty)
+							{
+								SetPixelGlobal(x + offset, y + 1, Pixel.Water);
+								SetPixelGlobal(x, y, Pixel.Empty);
+								break;
+							}
+							if (GetPixelGlobal(x + offset, y) == Pixel.Empty)
+							{
+								SetPixelGlobal(x + offset, y, Pixel.Water);
+								SetPixelGlobal(x, y, Pixel.Empty);
+								break;
+							}
+
+						}
+					}
+				}
+
+
+				break;
+		}
+
+	}
 
 	public byte[] GetRawBytes()
 	{
 		return Pixels;
 	}
-
-    private void SimulatePixel(int y, int x)
-    {
-        switch (GetPixel(x, y))
-        {
-            case Pixel.Sand:
-                {
-					if(GetPixelGlobal(x, y + 1) == Pixel.Empty)
-					{
-						SetPixelGlobal(x, y + 1, Pixel.Sand);
-						SetPixel(x, y, Pixel.Empty);
-					}
-					else if (GetPixelGlobal(x - 1, y + 1) == Pixel.Empty)
-					{
-						SetPixelGlobal(x - 1, y + 1, Pixel.Sand);
-						SetPixel(x, y, Pixel.Empty);
-					}
-					else if (GetPixelGlobal(x + 1, y + 1) == Pixel.Empty)
-					{
-						SetPixelGlobal(x + 1, y + 1, Pixel.Sand);
-						SetPixel(x, y, Pixel.Empty);
-					}
-
-                    break;
-                }
-        }
-    }
 
     public override string ToString()
     {
