@@ -31,6 +31,10 @@ void fragment() {
 	else if (material == 5) {
 		COLOR = vec4(0.0, 0.1, 1.0, 0.6);
 	}
+	// wet sand
+	else if (material == 6) {
+		COLOR = vec4(0.7, 0.6, 0.1, 1.0);
+	}
 	else {
 		COLOR = vec4(0.0, 0.0, 0.0, 0.0);
 	}

@@ -14,6 +14,7 @@ public partial class WorldManager : Node
     public const int ChunkHeight = 64;
 
     private TerrainGenerator _terrainGenerator;
+    private ChunkSaver _chunkSaver;
 
     private Vector2I _lastPlayerChunkCoord = new Vector2I(int.MaxValue, int.MaxValue);
     private int _renderDistance = 3;
@@ -22,6 +23,9 @@ public partial class WorldManager : Node
 
     public event Action<Chunk> ChunkLoaded;
     public event Action<Chunk> ChunkUnloaded;
+
+    public bool IsEvenTick = true;
+    public int GlobalFrameCount = 0;
 
     public override void _Ready()
     {
@@ -33,7 +37,8 @@ public partial class WorldManager : Node
         }
         Instance = this;
 
-        _terrainGenerator = new TerrainGenerator(412234);
+        _terrainGenerator = new TerrainGenerator(676767);
+        _chunkSaver = new ChunkSaver();
     }
 
     public override void _Process(double delta)
@@ -48,30 +53,21 @@ public partial class WorldManager : Node
 
         Stopwatch sp = new Stopwatch();
         sp.Start();
-        var orderedChunks = Chunks.Values.OrderByDescending(c => c.ChunkCoords.Y);
+        bool reverseX = GlobalFrameCount % 2 == 0;
 
-        foreach(Chunk chunk in orderedChunks)
+        var orderedChunks = Chunks.Values
+            .OrderByDescending(c => c.ChunkCoords.Y) // Vertikal: Unten zuerst (für Schwerkraft)
+            .ThenBy(c => reverseX ? -c.ChunkCoords.X : c.ChunkCoords.X); // Horizontal: Mal von links, mal von rechts!
+
+        foreach (Chunk chunk in orderedChunks)
         {
             chunk.Simulate();
         }
         sp.Stop();
         GD.Print(sp.ElapsedMilliseconds);
-    }
 
-    private void GenerateWorld(int chunksX, int chunksY)
-    {
-        for (int x = 0; x < chunksX; x++)
-        {
-            for (int y = 0; y < chunksY; y++)
-            {
-                var chunkCoord = new Vector2I(x, y);
-                var newChunk = new Chunk(ChunkWidth, ChunkHeight, chunkCoord);
-                _terrainGenerator.GenerateChunk(newChunk);
-
-                Chunks[chunkCoord] = newChunk;
-            }
-        }
-        GD.Print($"Welt generiert mit {Chunks.Count} Chunks.");
+        IsEvenTick = !IsEvenTick;
+        GlobalFrameCount++;
     }
 
     public Chunk GetChunk(Vector2I chunkCoord)
@@ -88,7 +84,7 @@ public partial class WorldManager : Node
         );
 
         var chunk = GetChunk(chunkCoord);
-        if (chunk == null) return Pixel.Empty; // Außerhalb der Welt = Leer
+        if (chunk == null) return Pixel.OutOfBounds; // Außerhalb der Welt = Leer
 
         int localX = globalX % ChunkWidth;
         int localY = globalY % ChunkHeight;
@@ -165,7 +161,8 @@ public partial class WorldManager : Node
         if (Chunks.ContainsKey(coord)) return;
 
         Chunk newChunk = new Chunk(ChunkWidth, ChunkHeight, coord);
-        _terrainGenerator.GenerateChunk(newChunk);
+        if (!_chunkSaver.TryLoadChunk("Dev World", newChunk))
+            _terrainGenerator.GenerateChunk(newChunk);
         Chunks.Add(coord, newChunk);
 
         ChunkLoaded?.Invoke(newChunk);
@@ -175,7 +172,10 @@ public partial class WorldManager : Node
     {
         if (!Chunks.ContainsKey(coord)) return;
 
+
         Chunk removedChunk = Chunks[coord];
+        _chunkSaver.SaveChunk("Dev World", removedChunk);
+
         Chunks.Remove(coord);
 
         ChunkUnloaded?.Invoke(removedChunk);

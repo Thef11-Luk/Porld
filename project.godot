@@ -43,3 +43,7 @@ mouse_left={
 [rendering]
 
 rendering_device/driver.windows="d3d12"
+
+[threading]
+
+worker_pool/max_threads=5

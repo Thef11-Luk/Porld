@@ -6,9 +6,12 @@ namespace Porld;
 
 public class TerrainGenerator
 {
+    public const int SurfaceY = 400;
+    public const int SeaLevel = 440;
     private FastNoiseLite _surfaceNoise;
     private FastNoiseLite _caveNoise;
     private FastNoiseLite _dirtNoise;
+    private FastNoiseLite _sandNoise;
     private int _seed;
 
     public TerrainGenerator(int seed = 1337)
@@ -32,6 +35,12 @@ public class TerrainGenerator
         _dirtNoise.Seed = seed + 2;
         _dirtNoise.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
         _dirtNoise.Frequency = 0.05f;
+
+        // noise for sand
+        _sandNoise = new FastNoiseLite();
+        _sandNoise.Seed = seed + 3;
+        _sandNoise.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
+        _sandNoise.Frequency = 0.05f;
     }
 
     public void GenerateChunk(Chunk chunk)
@@ -44,7 +53,7 @@ public class TerrainGenerator
             int globalX = chunkWidthInWorld + x;
 
             float surfaceNoiseVal = _surfaceNoise.GetNoise1D(globalX);
-            int surfaceY = 400 + (int)(surfaceNoiseVal * 400.0f);
+            int surfaceY = SurfaceY + (int)(surfaceNoiseVal * (double)SurfaceY);
 
             for (int y = 0; y < chunk.Height; y++)
             {
@@ -53,6 +62,10 @@ public class TerrainGenerator
                 // every pixel above surface is empty
                 if (globalY < surfaceY)
                 {
+                    if (globalY >= SeaLevel)
+                    {
+                        chunk.SetPixel(x, y, Pixel.Water);
+                    }
                     continue;
                 }
 
@@ -74,21 +87,31 @@ public class TerrainGenerator
                     }
                 }
 
-
-                float dirtNoiseVal = _dirtNoise.GetNoise1D(globalX);
-                int dynamicDirtThickness = 30 + (int)(dirtNoiseVal * 12.0f);
-
-                if (globalY == surfaceY)
+                float belowSeaLevel = Math.Clamp((surfaceY - SeaLevel) / 5, 0.0f, 1.0f);
+                float sandNoiseVal = _sandNoise.GetNoise1D(globalX);
+                int dynamicSandThickness = Math.Max(3 + (int)(sandNoiseVal * belowSeaLevel * 30.0f), 1);
+                if (globalY >= surfaceY && surfaceY > SeaLevel && globalY > SeaLevel && globalY <= surfaceY + dynamicSandThickness)
                 {
-                    chunk.SetPixel(x, y, Pixel.Grass);
+                    chunk.SetPixel(x, y, Pixel.WetSand);
                 }
-                else if (globalY < surfaceY + dynamicDirtThickness)
+                else
                 {
-                    chunk.SetPixel(x, y, Pixel.Dirt);
-                } else
-                {
-                    chunk.SetPixel(x, y, Pixel.Stone);
+                    float dirtNoiseVal = _dirtNoise.GetNoise1D(globalX);
+                    int dynamicDirtThickness = 30 + (int)(dirtNoiseVal * 12.0f);
+                    if (globalY == surfaceY)
+                    {
+                        chunk.SetPixel(x, y, Pixel.Grass);
+                    }
+                    else if (globalY < surfaceY + dynamicDirtThickness)
+                    {
+                        chunk.SetPixel(x, y, Pixel.Dirt);
+                    }
+                    else
+                    {
+                        chunk.SetPixel(x, y, Pixel.Stone);
+                    }
                 }
+
 
 
             }

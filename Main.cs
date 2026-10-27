@@ -41,19 +41,19 @@ public partial class Main : Node2D
 			}
 		}
 		
-		if (Input.IsKeyPressed(Key.Up))
+		if (Input.IsKeyPressed(Key.W))
 		{
 			cam.Position -= new Vector2(0, 4);
 		}
-		if (Input.IsKeyPressed(Key.Down))
+		if (Input.IsKeyPressed(Key.S))
 		{
 			cam.Position += new Vector2(0, 4);
 		}
-		if (Input.IsKeyPressed(Key.Left))
+		if (Input.IsKeyPressed(Key.A))
 		{
 			cam.Position -= new Vector2(4, 0);
 		}
-		if (Input.IsKeyPressed(Key.Right))
+		if (Input.IsKeyPressed(Key.D))
 		{
 			cam.Position += new Vector2(4, 0);
 		}
