@@ -1,14 +1,13 @@
-using System.Runtime.CompilerServices;
 using Godot;
 using Porld;
 
 public unsafe partial class ChunkView : Sprite2D
 {
-    private Image _image = null;
-    private ImageTexture _texture = null;
-    private readonly byte[] _buffer = new byte[Chunk.CellCount * 4];
+    private Image _image = null!;
+    private ImageTexture _texture = null!;
+    private readonly byte[] _buffer = new byte[Chunk.CellCount * 4];   // RGBA
 
-    public Chunk Chunk = null;
+    public Chunk Chunk = null!;
 
     public void Init(Chunk chunk)
     {
@@ -16,11 +15,22 @@ public unsafe partial class ChunkView : Sprite2D
         Centered = false;
         TextureFilter = TextureFilterEnum.Nearest;
         Position = new Vector2(chunk.Cx * Chunk.Size, chunk.Cy * Chunk.Size);
+        Modulate = Colors.White;
+        Visible = true;
 
-        _image = Image.CreateEmpty(Chunk.Size, Chunk.Size, false, Image.Format.Rgba8);
-        _image.Fill(new Color(1, 0, 0, 1));
-        _texture = ImageTexture.CreateFromImage(_image);
-        Texture = _texture;
+        if (_image == null)   // nur beim allerersten Mal anlegen, danach wiederverwenden
+        {
+            _image = Image.CreateEmpty(Chunk.Size, Chunk.Size, false, Image.Format.Rgba8);
+            _texture = ImageTexture.CreateFromImage(_image);
+            Texture = _texture;
+        }
+        chunk.NeedsRedraw = true;
+    }
+
+    public void Release()
+    {
+        Visible = false;
+        Chunk = null!;
     }
 
     public void Redraw()

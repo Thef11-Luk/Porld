@@ -1,11 +1,10 @@
-using Godot;
 using Porld;
 
 public static unsafe class Simulator
 {
-    private const int FlowRange = 4;
+    private const int FlowRange = 4;   // max. Zellen, die Flüssigkeit pro Frame seitlich springt
 
-    public static int Visited, Moved;
+    // Reproduzierbarer Zufall aus Position und Frame, unabhängig von der Update-Reihenfolge.
     public static uint Hash(int x, int y, int frame)
     {
         unchecked
@@ -16,18 +15,13 @@ public static unsafe class Simulator
         }
     }
 
-    public static void StepChunk(Chunk chunk, int frame)
-    {
-        if (!chunk.IsAwake) return;
-        bool ltr = (frame & 1) == 0;
-        for (int y = chunk.MaxY; y >= chunk.MinY; y--)
-            StepRow(chunk, y, frame, ltr);
-    }
-
+    // Simuliert eine Zeile eines Chunks innerhalb seines Dirty Rects.
     public static void StepRow(Chunk chunk, int y, int frame, bool leftToRight)
     {
         if (y < chunk.MinY || y > chunk.MaxY) return;
 
+        // Stempel = Frame-Nummer. Eine Zelle mit aktuellem Stempel wurde in diesem Frame
+        // schon bewegt. Ruhende Zellen müssen nie neu gestempelt werden.
         byte stamp = (byte)frame;
         int width = chunk.MaxX - chunk.MinX + 1;
 
@@ -37,11 +31,10 @@ public static unsafe class Simulator
             Cell* cell = chunk.Cells + y * Chunk.Size + x;
 
             if (cell->Material == Materials.Empty) continue;
-            Visited++;
 
             if (cell->Flags == stamp)
             {
-                chunk.MarkDirty(x, y);
+                chunk.MarkDirty(x, y);   // im nächsten Frame nochmal ansehen
                 continue;
             }
 
@@ -53,52 +46,50 @@ public static unsafe class Simulator
         }
     }
 
-    private static bool UpdatePowder(Chunk chunk, int x, int y, Cell* cell, byte stamp, int frame)
+    private static void UpdatePowder(Chunk chunk, int x, int y, Cell* cell, byte stamp, int frame)
     {
-        if (TryMove(chunk, x, y, x, y + 1, cell, stamp)) return true;
+        if (TryMove(chunk, x, y, x, y + 1, cell, stamp)) return;
 
-        int wx = chunk.Cx * Chunk.Size + x;
-        int wy = chunk.Cy * Chunk.Size + y;
-        int dir = (Hash(wx, wy, frame) & 1) == 0 ? -1 : 1;
-
-        if (TryMove(chunk, x, y, x + dir, y + 1, cell, stamp)) return true;
-        if (TryMove(chunk, x, y, x - dir, y + 1, cell, stamp)) return true;
-        return false;
+        int dir = RandomDir(chunk, x, y, frame, 0);
+        if (TryMove(chunk, x, y, x + dir, y + 1, cell, stamp)) return;
+        TryMove(chunk, x, y, x - dir, y + 1, cell, stamp);
     }
 
-    private static bool UpdateLiquid(Chunk chunk, int x, int y, Cell* cell, byte stamp, int frame)
+    private static void UpdateLiquid(Chunk chunk, int x, int y, Cell* cell, byte stamp, int frame)
     {
+        // Schneller Ausstieg: unten, diagonal und seitlich alles blockiert, nichts zu tun.
         if (IsBlocked(chunk, x, y + 1, cell) && IsBlocked(chunk, x - 1, y + 1, cell) &&
-    IsBlocked(chunk, x + 1, y + 1, cell) && IsBlocked(chunk, x - 1, y, cell) &&
-    IsBlocked(chunk, x + 1, y, cell))
-            return false;
-        // 1. nach unten
-        if (TryMove(chunk, x, y, x, y + 1, cell, stamp)) return true;
+            IsBlocked(chunk, x + 1, y + 1, cell) && IsBlocked(chunk, x - 1, y, cell) &&
+            IsBlocked(chunk, x + 1, y, cell))
+            return;
 
-        int wx = chunk.Cx * Chunk.Size + x;
-        int wy = chunk.Cy * Chunk.Size + y;
-        uint h = Hash(wx, wy, frame);
+        // 1. fallen
+        if (TryMove(chunk, x, y, x, y + 1, cell, stamp)) return;
 
-        // 2. diagonal nach unten
-        int dir = (h & 1) == 0 ? -1 : 1;
-        if (TryMove(chunk, x, y, x + dir, y + 1, cell, stamp)) return true;
-        if (TryMove(chunk, x, y, x - dir, y + 1, cell, stamp)) return true;
+        // 2. diagonal rutschen (Hash-Bit 0)
+        int dir = RandomDir(chunk, x, y, frame, 0);
+        if (TryMove(chunk, x, y, x + dir, y + 1, cell, stamp)) return;
+        if (TryMove(chunk, x, y, x - dir, y + 1, cell, stamp)) return;
 
-        // 3. seitlich fließen (anderes Hash-Bit als oben)
-        int side = ((h >> 1) & 1) == 0 ? -1 : 1;
-        if (TryFlow(chunk, x, y, side, cell, stamp)) return true;
-        if (TryFlow(chunk, x, y, -side, cell, stamp)) return true;
-
-        if (HasFreeRowAhead(chunk, x, y, cell))
-            chunk.MarkDirty(x, y);
-
-        return false;
+        // 3. seitlich fließen (Hash-Bit 1, unabhängig von Bit 0)
+        int side = RandomDir(chunk, x, y, frame, 1);
+        if (TryFlow(chunk, x, y, side, cell, stamp)) return;
+        TryFlow(chunk, x, y, -side, cell, stamp);
     }
 
+    // -1 oder +1, abhängig von Weltposition, Frame und Bit-Nummer.
+    private static int RandomDir(Chunk chunk, int x, int y, int frame, int bit)
+    {
+        int wx = chunk.Cx * Chunk.Size + x;
+        int wy = chunk.Cy * Chunk.Size + y;
+        return ((Hash(wx, wy, frame) >> bit) & 1) == 0 ? -1 : 1;
+    }
+
+    // Tauscht die Zelle mit dem Ziel, falls erlaubt.
     private static bool TryMove(Chunk chunk, int x, int y, int tx, int ty, Cell* cell, byte stamp)
     {
         Cell* target = chunk.GetCell(tx, ty);
-        if (target == null) return false;
+        if (target == null) return false;                                   // Wand
 
         if (!CanDisplace(cell->Material, target->Material)) return false;
         if (target->Material != Materials.Empty && target->Flags == stamp) return false;
@@ -110,12 +101,15 @@ public static unsafe class Simulator
         cell->Flags = stamp;
         target->Flags = stamp;
 
+        chunk.Modified = true;
+        chunk.MarkModified(tx, ty);   // Ziel kann im Nachbarchunk liegen
+
         chunk.MarkDirty(x, y);
         chunk.MarkDirty(tx, ty);
-        Moved++;
         return true;
     }
 
+    // Springt bis zu FlowRange Zellen seitlich, direkt zur weitesten freien Zelle.
     private static bool TryFlow(Chunk chunk, int x, int y, int dir, Cell* cell, byte stamp)
     {
         int furthest = 0;
@@ -123,21 +117,21 @@ public static unsafe class Simulator
         for (int i = 1; i <= FlowRange; i++)
         {
             Cell* target = chunk.GetCell(x + dir * i, y);
-            if (target == null) break;                              // ungeladen = Wand
+            if (target == null) break;
             if (!CanDisplace(cell->Material, target->Material)) break;
 
             if (target->Material != Materials.Empty && target->Flags == stamp)
             {
-                chunk.MarkDirty(x, y);                              // blockiert nur durch Timing: nächsten Frame nochmal versuchen
+                chunk.MarkDirty(x, y);   // nur durch Timing blockiert: nächsten Frame wieder versuchen
                 break;
             }
             furthest = i;
         }
 
-        if (furthest == 0) return false;
-        return TryMove(chunk, x, y, x + dir * furthest, y, cell, stamp);
+        return furthest != 0 && TryMove(chunk, x, y, x + dir * furthest, y, cell, stamp);
     }
 
+    // Leer ist frei. Flüssigkeit/Gas nur, wenn der Mover dichter ist. Feststoffe blockieren.
     private static bool CanDisplace(ushort mover, ushort target)
     {
         if (target == Materials.Empty) return true;
@@ -146,22 +140,6 @@ public static unsafe class Simulator
         if (t != MaterialType.Liquid && t != MaterialType.Gas) return false;
 
         return Materials.Densities[mover] > Materials.Densities[target];
-    }
-
-    // Liegt in einer Richtung hinter gleichem Material noch freier Platz?
-    private static bool HasFreeRowAhead(Chunk chunk, int x, int y, Cell* cell)
-    {
-        for (int dir = -1; dir <= 1; dir += 2)
-        {
-            for (int i = 1; i <= FlowRange; i++)
-            {
-                Cell* t = chunk.GetCell(x + dir * i, y);
-                if (t == null) break;
-                if (t->Material == Materials.Empty) return true;
-                if (t->Material != cell->Material) break;
-            }
-        }
-        return false;
     }
 
     private static bool IsBlocked(Chunk chunk, int x, int y, Cell* cell)

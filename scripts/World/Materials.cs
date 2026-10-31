@@ -1,4 +1,3 @@
-using System.Dynamic;
 using Godot;
 
 public enum MaterialType : byte { Empty, Solid, Powder, Liquid, Gas }
@@ -18,42 +17,38 @@ public static class Materials
     public const ushort Water = 2;
     public const ushort Stone = 3;
 
-    public static readonly MaterialDef[] Defs = new MaterialDef[]
+    // Index = Material-ID. Reihenfolge muss zu den Konstanten passen.
+    public static readonly MaterialDef[] Defs =
     {
-        new() { Name = "Empty", Type = MaterialType.Empty,  Color = new Color(0, 0, 0, 0),          Density = 0    },
+        new() { Name = "Empty", Type = MaterialType.Empty,  Color = new Color(0, 0, 0, 0),          Density = 0 },
         new() { Name = "Sand",  Type = MaterialType.Powder, Color = new Color(0.87f, 0.77f, 0.42f), Density = 1500 },
         new() { Name = "Water", Type = MaterialType.Liquid, Color = new Color(0.20f, 0.45f, 0.90f), Density = 1000 },
-        new() { Name = "Stone", Type = MaterialType.Solid,  Color = new Color(0.45f, 0.45f, 0.48f), Density = 3000 }
+        new() { Name = "Stone", Type = MaterialType.Solid,  Color = new Color(0.45f, 0.45f, 0.48f), Density = 3000 },
     };
 
+    // Schlanke Tabellen für die Hot Loop. Müssen UNTER Defs stehen (Initialisierungsreihenfolge).
     public static readonly MaterialType[] Types = BuildTypes();
     public static readonly int[] Densities = BuildDensities();
-    public static readonly uint[] ColorsRgba = BuildColors();
+    public static readonly uint[] ColorsRgba = BuildColors();   // R | G<<8 | B<<16 | A<<24
 
     private static MaterialType[] BuildTypes()
     {
-        MaterialType[] t = new MaterialType[Defs.Length];
-        for (int i = 0; i < Defs.Length; i++)
-        {
-            t[i] = Defs[i].Type;
-        }
+        var t = new MaterialType[Defs.Length];
+        for (int i = 0; i < t.Length; i++) t[i] = Defs[i].Type;
         return t;
     }
 
     private static int[] BuildDensities()
     {
-        int[] d = new int[Defs.Length];
-        for (int i = 0; i < Defs.Length; i++)
-        {
-            d[i] = Defs[i].Density;
-        }
+        var d = new int[Defs.Length];
+        for (int i = 0; i < d.Length; i++) d[i] = Defs[i].Density;
         return d;
     }
 
     private static uint[] BuildColors()
     {
         var c = new uint[Defs.Length];
-        for (int i = 0; i < Defs.Length; i++)
+        for (int i = 0; i < c.Length; i++)
         {
             Color col = Defs[i].Color;
             uint r = (uint)(col.R * 255);
