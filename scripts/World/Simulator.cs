@@ -4,6 +4,8 @@ using Porld;
 public static unsafe class Simulator
 {
     private const int FlowRange = 4;
+
+    public static int Visited, Moved;
     public static uint Hash(int x, int y, int frame)
     {
         unchecked
@@ -16,33 +18,38 @@ public static unsafe class Simulator
 
     public static void StepChunk(Chunk chunk, int frame)
     {
-        if (!chunk.IsAwake) return;                       // schlafender Chunk kostet nichts
+        if (!chunk.IsAwake) return;
+        bool ltr = (frame & 1) == 0;
+        for (int y = chunk.MaxY; y >= chunk.MinY; y--)
+            StepRow(chunk, y, frame, ltr);
+    }
+
+    public static void StepRow(Chunk chunk, int y, int frame, bool leftToRight)
+    {
+        if (y < chunk.MinY || y > chunk.MaxY) return;
 
         byte stamp = (byte)frame;
-        bool leftToRight = (frame & 1) == 0;
         int width = chunk.MaxX - chunk.MinX + 1;
 
-        for (int y = chunk.MaxY; y >= chunk.MinY; y--)
+        for (int i = 0; i < width; i++)
         {
-            for (int i = 0; i < width; i++)
+            int x = leftToRight ? chunk.MinX + i : chunk.MaxX - i;
+            Cell* cell = chunk.Cells + y * Chunk.Size + x;
+
+            if (cell->Material == Materials.Empty) continue;
+            Visited++;
+
+            if (cell->Flags == stamp)
             {
-                int x = leftToRight ? chunk.MinX + i : chunk.MaxX - i;
-                Cell* cell = chunk.Cells + y * Chunk.Size + x;
-
-                if (cell->Material == Materials.Empty) continue;
-
-                if (cell->Flags == stamp)                 // schon bewegt (oder seltener Zufallstreffer)
-                {
-                    chunk.MarkDirty(x, y);
-                    continue;
-                }
-
-                MaterialType type = Materials.Types[cell->Material];
-                if (type == MaterialType.Powder)
-                    UpdatePowder(chunk, x, y, cell, stamp, frame);
-                else if (type == MaterialType.Liquid)
-                    UpdateLiquid(chunk, x, y, cell, stamp, frame);
+                chunk.MarkDirty(x, y);
+                continue;
             }
+
+            MaterialType type = Materials.Types[cell->Material];
+            if (type == MaterialType.Powder)
+                UpdatePowder(chunk, x, y, cell, stamp, frame);
+            else if (type == MaterialType.Liquid)
+                UpdateLiquid(chunk, x, y, cell, stamp, frame);
         }
     }
 
@@ -61,6 +68,10 @@ public static unsafe class Simulator
 
     private static bool UpdateLiquid(Chunk chunk, int x, int y, Cell* cell, byte stamp, int frame)
     {
+        if (IsBlocked(chunk, x, y + 1, cell) && IsBlocked(chunk, x - 1, y + 1, cell) &&
+    IsBlocked(chunk, x + 1, y + 1, cell) && IsBlocked(chunk, x - 1, y, cell) &&
+    IsBlocked(chunk, x + 1, y, cell))
+            return false;
         // 1. nach unten
         if (TryMove(chunk, x, y, x, y + 1, cell, stamp)) return true;
 
@@ -79,7 +90,7 @@ public static unsafe class Simulator
         if (TryFlow(chunk, x, y, -side, cell, stamp)) return true;
 
         if (HasFreeRowAhead(chunk, x, y, cell))
-            chunk.MarkDirty(x, y);   
+            chunk.MarkDirty(x, y);
 
         return false;
     }
@@ -101,6 +112,7 @@ public static unsafe class Simulator
 
         chunk.MarkDirty(x, y);
         chunk.MarkDirty(tx, ty);
+        Moved++;
         return true;
     }
 
@@ -150,5 +162,11 @@ public static unsafe class Simulator
             }
         }
         return false;
+    }
+
+    private static bool IsBlocked(Chunk chunk, int x, int y, Cell* cell)
+    {
+        Cell* t = chunk.GetCell(x, y);
+        return t == null || !CanDisplace(cell->Material, t->Material);
     }
 }

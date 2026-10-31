@@ -15,7 +15,7 @@ public struct Cell
 
 public sealed unsafe class Chunk : IDisposable
 {
-    public const int Size = 256;
+    public const int Size = 64;
     public const int CellCount = Size * Size;
 
     public readonly int Cx, Cy;
@@ -61,6 +61,12 @@ public sealed unsafe class Chunk : IDisposable
 
     public void MarkDirty(int x, int y)
     {
+        if (x > 0 && x < Size - 1 && y > 0 && y < Size - 1)
+        {
+            MarkLocal(x - 1, y - 1);
+            MarkLocal(x + 1, y + 1);
+            return;
+        }
         for (int dy = -1; dy <= 1; dy++)
         {
             for (int dx = -1; dx <= 1; dx++)
@@ -68,7 +74,7 @@ public sealed unsafe class Chunk : IDisposable
                 int px = x + dx, py = y + dy;
                 int ox = px < 0 ? -1 : (px >= Size ? 1 : 0);
                 int oy = py < 0 ? -1 : (py >= Size ? 1 : 0);
-            
+
                 Chunk? target = Neighbors[(oy + 1) * 3 + (ox + 1)];
                 if (target == null) continue;
 

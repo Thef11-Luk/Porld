@@ -17,9 +17,9 @@ public unsafe partial class Main : Node2D
 
 	public override void _Ready()
 	{
-		for (int y = 0; y < 1; y++)
+		for (int y = 0; y < 8; y++)
 		{
-			for (int x = 0; x < 1; x++)
+			for (int x = 0; x < 8; x++)
 			{
 				var chunk = _world.LoadChunk(new Vector2I(x, y));
 				var view = new ChunkView();
@@ -87,11 +87,14 @@ public unsafe partial class Main : Node2D
 	{
 		var sw = Stopwatch.StartNew();
 
-		_world.Step(_frame);
+		_world.StepRowWise(_frame);
 		_frame++;
 
 		sw.Stop();
-		if (_frame % 60 == 0)
+		if (_frame % 60 == 0) {
 			GD.Print($"Sim: {sw.Elapsed.TotalMilliseconds:F3} ms");
+			GD.Print($"Sim: {sw.Elapsed.TotalMilliseconds:F3} ms | besucht {Simulator.Visited} | bewegt {Simulator.Moved}");
+			Simulator.Visited = 0; Simulator.Moved = 0;
+		}
 	}
 }

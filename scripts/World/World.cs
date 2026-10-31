@@ -19,6 +19,25 @@ public sealed class World
     private Row[] _rows = System.Array.Empty<Row>();
     private bool _scheduleDirty = true;
 
+    public void StepRowWise(int frame)
+    {
+        foreach (var chunk in _chunks.Values)
+            chunk.BeginFrame();
+
+        bool ltr = (frame & 1) == 0;
+
+        var bands = _chunks.Values.GroupBy(c => c.Cy).OrderByDescending(g => g.Key);
+        foreach (var band in bands)
+        {
+            var list = ltr ? band.OrderBy(c => c.Cx).ToArray()
+                           : band.OrderByDescending(c => c.Cx).ToArray();
+
+            for (int y = Chunk.Size - 1; y >= 0; y--)
+                foreach (var chunk in list)
+                    if (chunk.IsAwake) Simulator.StepRow(chunk, y, frame, ltr);
+        }
+    }
+
     public Chunk? GetChunk(Vector2I pos)
     {
         _chunks.TryGetValue(pos, out var chunk);
