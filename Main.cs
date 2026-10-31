@@ -1,84 +1,72 @@
 using Godot;
-using System;
 using Porld;
+using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
-public partial class Main : Node2D
+public unsafe partial class Main : Node2D
 {
-	private Camera2D cam;
-	public override void _Ready()
-	{
-		cam = GetNode<Camera2D>("Camera2D");
+	private readonly World _world = new();
+	private readonly Dictionary<Vector2I, ChunkView> _views = new();
 
-		WorldManager.Instance.ChunkLoaded += OnChunkLoaded;		
-		WorldManager.Instance.ChunkUnloaded += OnChunkUnloaded;
-	}
+	private ushort _brushMaterial = Materials.Sand;
+	private const int BrushRadius = 4;
 
-	// Called every frame. 'delta' is the elapsed time since the previous frame.
-	public override void _Process(double delta)
-	{
-		WorldManager.Instance.UpdateChunkStreaming(cam.Position);
-
-		if(Input.IsMouseButtonPressed(MouseButton.Left))
+    public override void _Ready()
+    {
+        for (int y = 0; y < 3; y++)
 		{
-			Vector2I mousePos = (Vector2I)GetLocalMousePosition();
-			WorldManager.Instance.SetPixelGlobal(mousePos.X, mousePos.Y, Pixel.Sand);
-		}
-		if(Input.IsMouseButtonPressed(MouseButton.Right))
-		{
-			Vector2I mousePos = (Vector2I)GetLocalMousePosition();
-			WorldManager.Instance.SetPixelGlobal(mousePos.X, mousePos.Y, Pixel.Water);
-		}
-		if(Input.IsMouseButtonPressed(MouseButton.Middle))
-		{
-			Vector2I mousePos = (Vector2I)GetLocalMousePosition();
-			int radius = 5;
-			for (int x = -radius; x <= radius; x++)
+			for (int x = 0; x < 3; x++)
 			{
-				for (int y = -radius; y <= radius; y++)
-				{
-					WorldManager.Instance.SetPixelGlobal(mousePos.X + x, mousePos.Y + y, Pixel.Empty);
-				}
+				var chunk = _world.LoadChunk(new Vector2I(x, y));
+				var view = new ChunkView();
+				AddChild(view);
+				view.Init(chunk);
+				_views[new Vector2I(x, y)] = view;
 			}
 		}
-		
-		if (Input.IsKeyPressed(Key.W))
-		{
-			cam.Position -= new Vector2(0, 4);
-		}
-		if (Input.IsKeyPressed(Key.S))
-		{
-			cam.Position += new Vector2(0, 4);
-		}
-		if (Input.IsKeyPressed(Key.A))
-		{
-			cam.Position -= new Vector2(4, 0);
-		}
-		if (Input.IsKeyPressed(Key.D))
-		{
-			cam.Position += new Vector2(4, 0);
-		}
-	}
+    }
 
-	private void OnChunkLoaded(Chunk chunk)
-	{
-		ChunkNode chunkNode = new ChunkNode(chunk);
-		chunkNode.Position = chunk.ChunkCoords * 64;
-		AddChild(chunkNode);
-		GD.Print("Chunk added");
-	}
+    public override void _Process(double delta)
+    {
+        if (Input.IsKeyPressed(Key.Key1)) _brushMaterial = Materials.Sand;
+        if (Input.IsKeyPressed(Key.Key2)) _brushMaterial = Materials.Water;
+        if (Input.IsKeyPressed(Key.Key3)) _brushMaterial = Materials.Stone;
+        if (Input.IsKeyPressed(Key.Key4)) _brushMaterial = Materials.Empty;
 
-	private void OnChunkUnloaded(Chunk chunk)
-	{
-		foreach(var node in GetChildren())
+		if (Input.IsMouseButtonPressed(MouseButton.Left))
 		{
-			if (node is ChunkNode chunkNode)
+			Vector2 mouse = GetGlobalMousePosition();
+			Paint((int)Mathf.Floor(mouse.X), (int)Mathf.Floor(mouse.Y));
+		}
+
+		foreach (var view in _views.Values)
+		{
+			view.Redraw();
+		}
+    }
+
+	private void Paint(int wx, int wy)
+	{
+		for (int dy = -BrushRadius; dy <= BrushRadius; dy++)
+		{
+			for (int dx = -BrushRadius; dx <= BrushRadius; dx++)
 			{
-				if (chunkNode.Chunk == chunk)
-				{
-					node.QueueFree();
-					RemoveChild(node);
-				}
+				if (dx * dx + dy * dy > BrushRadius * BrushRadius) continue;
+				SetCellWorld(wx + dx, wy + dy, _brushMaterial);
 			}
 		}
+	}
+
+	private void SetCellWorld(int wx, int wy, ushort material)
+	{
+		int cx = Mathf.FloorToInt(wx / (float)UnsafeChunk.Size);
+		int cy = Mathf.FloorToInt(wy / (float)UnsafeChunk.Size);
+
+		var chunk = _world.GetChunk(new Vector2I(cx, cy));
+		if (chunk == null) return;
+
+		int lx = wx - cx * UnsafeChunk.Size;
+		int ly = wy - cy * UnsafeChunk.Size;
+		chunk.Cells[ly * UnsafeChunk.Size + lx].Material = material;
 	}
 }

@@ -18,6 +18,7 @@ public unsafe partial class ChunkView : Sprite2D
         Position = new Vector2(chunk.Cx * UnsafeChunk.Size, chunk.Cy * UnsafeChunk.Size);
 
         _image = Image.CreateEmpty(UnsafeChunk.Size, UnsafeChunk.Size, false, Image.Format.Rgba8);
+        _image.Fill(new Color(1, 0, 0, 1));
         _texture = ImageTexture.CreateFromImage(_image);
         Texture = _texture;
     }
@@ -35,6 +36,6 @@ public unsafe partial class ChunkView : Sprite2D
         }
 
         _image.SetData(UnsafeChunk.Size, UnsafeChunk.Size, false, Image.Format.Rgba8, _buffer);
-        _texture.Update(_image);
+        _texture.SetImage(_image);
     }
 }
