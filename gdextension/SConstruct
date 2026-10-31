@@ -1,0 +1,24 @@
+import os
+import sys
+
+env = DefaultEnvironment()
+
+# Hier korrigieren wir die Include-Pfade, damit SCons die Header findet
+env.Append(CPPPATH=[
+    "godot-cpp/include",
+    "godot-cpp/include/gen",
+    "godot-cpp/gdextension",
+    "godot-cpp/gen/include"
+])
+
+sources = [
+    "register_types.cpp",
+    "ChunkSimulator.cpp"
+]
+
+lib = env.SharedLibrary(
+    target="bin/chunk_simulator",
+    source=sources
+)
+
+Default(lib)
