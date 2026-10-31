@@ -5,22 +5,22 @@ using Porld;
 
 public sealed class World
 {
-    private readonly Dictionary<Vector2I, UnsafeChunk> _chunks = new();
+    private readonly Dictionary<Vector2I, Chunk> _chunks = new();
 
-    public IReadOnlyDictionary<Vector2I, UnsafeChunk> Chunks => _chunks;
+    public IReadOnlyDictionary<Vector2I, Chunk> Chunks => _chunks;
 
-    public UnsafeChunk? GetChunk(Vector2I pos)
+    public Chunk? GetChunk(Vector2I pos)
     {
         _chunks.TryGetValue(pos, out var chunk);
         return chunk;
     }
 
-    public UnsafeChunk LoadChunk(Vector2I pos)
+    public Chunk LoadChunk(Vector2I pos)
     {
         if (_chunks.TryGetValue(pos, out var existing))
             return existing;
 
-        var chunk = new UnsafeChunk(pos.X, pos.Y);
+        var chunk = new Chunk(pos.X, pos.Y);
         _chunks[pos] = chunk;
 
         for (int dy = -1; dy <= 1; dy++)
@@ -33,6 +33,7 @@ public sealed class World
                 {
                     chunk.Neighbors[(dy + 1) * 3 + (dx + 1)] = neighbor;
                     neighbor.Neighbors[(-dy + 1) * 3 + (-dx + 1)] = chunk;
+                    neighbor.MarkAll();
                 }
             }
         }

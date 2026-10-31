@@ -1,237 +1,98 @@
-﻿using Godot;
 using System;
-using System.Linq;
-using System.Text;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using Godot;
 
 namespace Porld;
 
-public enum Pixel : byte
+[StructLayout(LayoutKind.Sequential, Size = 4)]
+public struct Cell
 {
-    Empty,
-    Sand,
-	Stone,
-	Grass,
-	Dirt,
-	Water,
-	WetSand,
-	OutOfBounds
+    public ushort Material;
+    public byte State;
+    public byte Flags;
 }
-public class Chunk
+
+public sealed unsafe class Chunk : IDisposable
 {
-    public readonly byte Width, Height;
-	public readonly Vector2I ChunkCoords;
-    public byte[] Pixels;
-	public bool IsDirty = true;
+    public const int Size = 64;
+    public const int CellCount = Size * Size;
 
-	public int InactiveTicks = 0;
-	private const int SleepThreshold = 5;
+    public readonly int Cx, Cy;
+    public Cell* Cells { get; private set; }
 
-    public Chunk(byte width, byte height, Vector2I chunkCoords)
+    public readonly Chunk?[] Neighbors = new Chunk?[9];
+
+    public int MinX = Size, MinY = Size, MaxX = -1, MaxY = -1;
+    private int _nMinX = 0, _nMinY = 0, _nMaxX = Size - 1, _nMaxY = Size - 1;
+
+    public bool NeedsRedraw = true;
+    public bool IsAwake => MinX <= MaxX;
+
+    public Chunk(int cx, int cy)
     {
-        Width = width;
-        Height = height;
-        Pixels = new byte[height * width];
-		ChunkCoords = chunkCoords;
+        Cx = cx; Cy = cy;
+        Cells = (Cell*)NativeMemory.AllocZeroed((nuint)CellCount, (nuint)sizeof(Cell));
+        Neighbors[4] = this;
     }
 
-	private int GetIndex(int x, int y) => y * Width + x;
-
-	private bool Inside(int x, int y)
+    public void BeginFrame()
     {
-        return y < Height && y >= 0 && x < Width && x >= 0;
+        MinX = _nMinX; MinY = _nMinY; MaxX = _nMaxX; MaxY = _nMaxY;
+        _nMinX = Size; _nMinY = Size; _nMaxX = -1; _nMaxY = -1;
     }
 
-	public Pixel GetPixel(int x, int y)
+    private void MarkLocal(int x, int y)
     {
-        return (Pixel)Pixels[GetIndex(x, y)];
+        if (x < _nMinX) _nMinX = x;
+        if (y < _nMinY) _nMinY = y;
+        if (x > _nMaxX) _nMaxX = x;
+        if (y > _nMaxY) _nMaxY = y;
+        NeedsRedraw = true;
     }
 
-	private Pixel GetPixelGlobal(int x, int y)
-	{
-		if (Inside(x, y))
-		{
-			return GetPixel(x, y);
-		}
-		int globalX = ChunkCoords.X * Width + x;
-		int globalY = ChunkCoords.Y * Height + y;
-		return WorldManager.Instance.GetPixelGlobal(globalX, globalY);
-	}
-
-	public void SetPixel(int x, int y, Pixel pixel)
+    public void MarkAll()
     {
-		InactiveTicks = 0;
-		IsDirty = true;
-        Pixels[GetIndex(x, y)] = (byte)pixel;
-    } 
+        _nMinX = 0; _nMinY = 0; _nMaxX = Size - 1; _nMaxY = Size - 1;
+        NeedsRedraw = true;
+    }
 
-	private void SetPixelGlobal(int x, int y, Pixel pixel)
-	{
-		if (Inside(x, y))
-		{
-			SetPixel(x, y, pixel);
-			return;
-		}
-		int globalX = ChunkCoords.X * Width + x;
-		int globalY = ChunkCoords.Y * Height + y;
-		WorldManager.Instance.SetPixelGlobal(globalX, globalY, pixel);
-	}
-
-	private void SwapPixels(int x1, int y1, int x2, int y2)
-	{
-		Pixel temp = GetPixelGlobal(x1, y1);
-		SetPixelGlobal(x1, y1, GetPixelGlobal(x2, y2));
-		SetPixelGlobal(x2, y2, temp);
-	}
-
-    public void Simulate()
+    public void MarkDirty(int x, int y)
     {
-		if (InactiveTicks >= SleepThreshold)
-		{
-			return;
-		}
-
-		InactiveTicks++;
-		int start = WorldManager.Instance.IsEvenTick ? 0 : Width - 1;
-		int end = WorldManager.Instance.IsEvenTick ? Width - 1 : 0;
-		int change = WorldManager.Instance.IsEvenTick ? 1 : -1;
-		for (int y = Height - 1; y >= 0; y--)
+        for (int dy = -1; dy <= 1; dy++)
         {
-
-            for (int x = start; x != end; x += change)
+            for (int dx = -1; dx <= 1; dx++)
             {
-                SimulatePixel(y, x);
+                int px = x + dx, py = y + dy;
+                int ox = px < 0 ? -1 : (px >= Size ? 1 : 0);
+                int oy = py < 0 ? -1 : (py >= Size ? 1 : 0);
+                Neighbors[(oy + 1) * 3 + (ox + 1)]?.MarkLocal(px - ox * Size, py - oy * Size);
             }
         }
     }
 
-
-
-    private void SimulatePixel(int y, int x)
+    public Cell* GetCell(int x, int y)
     {
-        switch (GetPixel(x, y))
-        {
-            case Pixel.Sand:
-                {
-					if(new Pixel[]{Pixel.Empty, Pixel.Water}.Contains(GetPixelGlobal(x, y + 1)))
-					{
-						if (GetPixelGlobal(x, y + 1) == Pixel.Water)
-						{
-							SetPixelGlobal(x, y + 1, Pixel.WetSand);
-							SetPixelGlobal(x, y, Pixel.Empty);
-						}
-						else
-							SwapPixels(x, y, x, y + 1);
-					}
-					else if (new Pixel[]{Pixel.Empty, Pixel.Water}.Contains(GetPixelGlobal(x - 1, y + 1)))
-					{
-						if (GetPixelGlobal(x - 1, y + 1) == Pixel.Water)
-						{
-							SetPixelGlobal(x - 1, y + 1, Pixel.WetSand);
-							SetPixelGlobal(x, y, Pixel.Empty);
-						}
-						else
-							SwapPixels(x, y, x - 1, y + 1);
-					}
-					else if (new Pixel[]{Pixel.Empty, Pixel.Water}.Contains(GetPixelGlobal(x + 1, y + 1)))
-					{
-						if (GetPixelGlobal(x + 1, y + 1) == Pixel.Water)
-						{
-							SetPixelGlobal(x + 1, y + 1, Pixel.WetSand);
-							SetPixelGlobal(x, y, Pixel.Empty);
-						}
-						else
-							SwapPixels(x, y, x + 1, y + 1);
-					}
+        int dx = x < 0 ? -1 : (x >= Size ? 1 : 0);
+        int dy = y < 0 ? -1 : (y >= Size ? 1 : 0);
+        var chunk = Neighbors[(dy + 1) * 3 + (dx + 1)];
+        if (chunk == null) return null;
 
-                    break;
-				}
-			case Pixel.Water:
-				{
-					int[] order;
-					if ( WorldManager.Instance.IsEvenTick)
-					{
-						order = [-1, 1];
-					} else
-					{
-						order = [1, -1];
-					}
-
-
-					if (GetPixelGlobal(x, y + 2) == Pixel.Empty && GetPixelGlobal(x, y + 1) == Pixel.Empty)
-					{
-						SetPixelGlobal(x, y + 1, Pixel.Water);
-						SetPixelGlobal(x, y, Pixel.Empty);
-					}
-					else
-					{
-						bool pixelSet = false;
-						foreach (int offset in order)
-						{
-							if (GetPixelGlobal(x + offset, y + 1) == Pixel.Empty)
-							{
-								SetPixelGlobal(x + offset, y + 1, Pixel.Water);
-								SetPixelGlobal(x, y, Pixel.Empty);
-								pixelSet = true;
-								break;
-							}
-						}
-						if (pixelSet) break;
-
-						foreach (int offset in order)
-						{
-							if (GetPixelGlobal(x + offset, y) == Pixel.Empty)
-							{
-								SetPixelGlobal(x + offset, y, Pixel.Water);
-								SetPixelGlobal(x, y, Pixel.Empty);
-								break;
-							}
-						}
-					}
-					break;
-				}
-			case Pixel.WetSand:
-				{
-					if(new Pixel[]{Pixel.Empty, Pixel.Water}.Contains(GetPixelGlobal(x, y + 1)))
-					{
-						SwapPixels(x, y, x, y + 1);
-					}
-					else if (new Pixel[]{Pixel.Empty, Pixel.Water}.Contains(GetPixelGlobal(x - 1, y + 1)))
-					{
-						SwapPixels(x, y, x - 1, y + 1);
-					}
-					else if (new Pixel[]{Pixel.Empty, Pixel.Water}.Contains(GetPixelGlobal(x + 1, y + 1)))
-					{
-						SwapPixels(x, y, x + 1, y + 1);
-					}
-
-                    break;
-				}
-
-		}
-
-	}
-
-	public bool IsActive()
-	{
-		return InactiveTicks < SleepThreshold;
-	}
-
-    public override string ToString()
-    {
-        StringBuilder asStringBuilder = new StringBuilder();
-
-        for(int y = 0; y < Height; y++)
-        {
-            for(int x = 0; x < Width; x++)
-            {
-                asStringBuilder.Append(Pixels[GetIndex(x, y)]);
-            }
-            if (y < Height - 1)
-            {
-                asStringBuilder.AppendLine();
-            }
-        }
-
-        return asStringBuilder.ToString();
+        int lx = x - dx * Size;
+        int ly = y - dy * Size;
+        Debug.Assert(lx >= 0 && lx < Size && ly >= 0 && ly < Size);
+        return chunk.Cells + ly * Size + lx;
     }
+
+    public void Dispose()
+    {
+        if (Cells != null)
+        {
+            NativeMemory.Free(Cells);
+            Cells = null;
+        }
+        GC.SuppressFinalize(this);
+    }
+
+    ~Chunk() => Dispose();
 }
