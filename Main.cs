@@ -17,9 +17,9 @@ public unsafe partial class Main : Node2D
 
 	public override void _Ready()
 	{
-		for (int y = 0; y < 3; y++)
+		for (int y = 0; y < 1; y++)
 		{
-			for (int x = 0; x < 3; x++)
+			for (int x = 0; x < 1; x++)
 			{
 				var chunk = _world.LoadChunk(new Vector2I(x, y));
 				var view = new ChunkView();
@@ -41,6 +41,12 @@ public unsafe partial class Main : Node2D
 		{
 			Vector2 mouse = GetGlobalMousePosition();
 			Paint((int)Mathf.Floor(mouse.X), (int)Mathf.Floor(mouse.Y));
+		}
+
+		foreach (var view in _views.Values)
+		{
+			var c = view.Chunk;
+			view.Modulate = c.IsAwake ? new Color(1, 1, 1) : new Color(0.55f, 0.55f, 0.55f);
 		}
 
 		foreach (var view in _views.Values)
@@ -77,23 +83,15 @@ public unsafe partial class Main : Node2D
 		chunk.MarkDirty(lx, ly);
 	}
 
-    public override void _PhysicsProcess(double delta)
-    {
-		Stopwatch sw = new();
-		sw.Start();
+	public override void _PhysicsProcess(double delta)
+	{
+		var sw = Stopwatch.StartNew();
 
-		foreach (var chunk in _world.Chunks.Values)
-		{
-			chunk.BeginFrame();
-		}
-
-		var ordered = _world.Chunks.Values.OrderByDescending(c => c.Cy);
-        foreach (var chunk in ordered)
-		{
-			Simulator.StepChunk(chunk, _frame);
-		}
+		_world.Step(_frame);
 		_frame++;
+
 		sw.Stop();
-		GD.Print(sw.ElapsedMilliseconds);
-    }
+		if (_frame % 60 == 0)
+			GD.Print($"Sim: {sw.Elapsed.TotalMilliseconds:F3} ms");
+	}
 }

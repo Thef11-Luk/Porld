@@ -15,7 +15,7 @@ public struct Cell
 
 public sealed unsafe class Chunk : IDisposable
 {
-    public const int Size = 64;
+    public const int Size = 256;
     public const int CellCount = Size * Size;
 
     public readonly int Cx, Cy;
@@ -28,6 +28,8 @@ public sealed unsafe class Chunk : IDisposable
 
     public bool NeedsRedraw = true;
     public bool IsAwake => MinX <= MaxX;
+
+    private readonly object _lock = new();
 
     public Chunk(int cx, int cy)
     {
@@ -66,9 +68,22 @@ public sealed unsafe class Chunk : IDisposable
                 int px = x + dx, py = y + dy;
                 int ox = px < 0 ? -1 : (px >= Size ? 1 : 0);
                 int oy = py < 0 ? -1 : (py >= Size ? 1 : 0);
-                Neighbors[(oy + 1) * 3 + (ox + 1)]?.MarkLocal(px - ox * Size, py - oy * Size);
+            
+                Chunk? target = Neighbors[(oy + 1) * 3 + (ox + 1)];
+                if (target == null) continue;
+
+                int lx = px - ox * Size;
+                int ly = py - oy * Size;
+
+                if (target == this) MarkLocal(lx, ly);
+                else target.MarkLocalShared(lx, ly);
             }
         }
+    }
+
+    private void MarkLocalShared(int x, int y)
+    {
+        lock (_lock) { MarkLocal(x, y); }
     }
 
     public Cell* GetCell(int x, int y)

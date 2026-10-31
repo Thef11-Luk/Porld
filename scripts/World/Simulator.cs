@@ -78,6 +78,9 @@ public static unsafe class Simulator
         if (TryFlow(chunk, x, y, side, cell, stamp)) return true;
         if (TryFlow(chunk, x, y, -side, cell, stamp)) return true;
 
+        if (HasFreeRowAhead(chunk, x, y, cell))
+            chunk.MarkDirty(x, y);   
+
         return false;
     }
 
@@ -131,5 +134,21 @@ public static unsafe class Simulator
         if (t != MaterialType.Liquid && t != MaterialType.Gas) return false;
 
         return Materials.Densities[mover] > Materials.Densities[target];
+    }
+
+    // Liegt in einer Richtung hinter gleichem Material noch freier Platz?
+    private static bool HasFreeRowAhead(Chunk chunk, int x, int y, Cell* cell)
+    {
+        for (int dir = -1; dir <= 1; dir += 2)
+        {
+            for (int i = 1; i <= FlowRange; i++)
+            {
+                Cell* t = chunk.GetCell(x + dir * i, y);
+                if (t == null) break;
+                if (t->Material == Materials.Empty) return true;
+                if (t->Material != cell->Material) break;
+            }
+        }
+        return false;
     }
 }

@@ -2,12 +2,22 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using Godot;
 using Porld;
+using System.Linq;
 
 public sealed class World
 {
     private readonly Dictionary<Vector2I, Chunk> _chunks = new();
 
     public IReadOnlyDictionary<Vector2I, Chunk> Chunks => _chunks;
+
+    private struct Row
+    {
+        public Chunk[] Even;
+        public Chunk[] Odd;
+    }
+
+    private Row[] _rows = System.Array.Empty<Row>();
+    private bool _scheduleDirty = true;
 
     public Chunk? GetChunk(Vector2I pos)
     {
@@ -38,6 +48,7 @@ public sealed class World
             }
         }
 
+        _scheduleDirty = true;
         return chunk;
     }
 
@@ -59,5 +70,55 @@ public sealed class World
         }
 
         chunk.Dispose();
+    }
+
+    private void RebuildSchedule()
+    {
+        _rows = _chunks.Values
+            .GroupBy(c => c.Cy)
+            .OrderByDescending(g => g.Key)                       // unterste Reihe zuerst
+            .Select(g => new Row
+            {
+                Even = g.Where(c => (c.Cx & 1) == 0).ToArray(),
+                Odd = g.Where(c => (c.Cx & 1) != 0).ToArray(),
+            })
+            .ToArray();
+        _scheduleDirty = false;
+    }
+
+    public void Step(int frame)
+    {
+        if (_scheduleDirty) RebuildSchedule();
+
+        foreach (var chunk in _chunks.Values)
+            chunk.BeginFrame();                                   // erst alle umschalten
+
+        bool evenFirst = (frame & 1) == 0;
+        foreach (var row in _rows)
+        {
+            RunPhase(evenFirst ? row.Even : row.Odd, frame);
+            RunPhase(evenFirst ? row.Odd : row.Even, frame);
+        }
+    }
+
+    private static void RunPhase(Chunk[] chunks, int frame)
+    {
+        int awake = 0;
+        for (int i = 0; i < chunks.Length; i++)
+            if (chunks[i].IsAwake) awake++;
+
+        if (awake == 0) return;
+
+        if (awake == 1)                                            // Threads lohnen sich nicht
+        {
+            for (int i = 0; i < chunks.Length; i++)
+                if (chunks[i].IsAwake) Simulator.StepChunk(chunks[i], frame);
+            return;
+        }
+
+        System.Threading.Tasks.Parallel.For(0, chunks.Length, i =>
+        {
+            if (chunks[i].IsAwake) Simulator.StepChunk(chunks[i], frame);
+        });
     }
 }
